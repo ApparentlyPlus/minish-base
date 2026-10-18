@@ -14,11 +14,11 @@ struct job {
 static void print_prompt(void);
 static int read_line(char *buffer, size_t size);
 static int execute_pipeline(struct pipeline *pipeline);
+static int reghandler(int signo, void (*handler)(int), int flags);
 static void setup_terminal(void);
 static void restore_terminal(void);
 
 void handle_sigchld(int signo);
-static int reghandler(int signo, void (*handler)(int), int flags);
 void init_bg_jobs(struct job *jobs);
 void add_bg_job(const pid_t pid);
 void remove_bg_job(const pid_t pid);
@@ -34,7 +34,6 @@ struct builtin {
 static const struct builtin *ffunc(const char *name);
 static int b_cd(struct command *cmd);
 static int b_exit(struct command *cmd);
-static int b_clear(struct command *cmd);
 
 // Colors for style!
 

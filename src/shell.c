@@ -28,7 +28,6 @@ static struct termios oterm;
 static const struct builtin b_ins[] = {
 	{ "cd", 1, b_cd },
 	{ "exit", 0, b_exit },
-	{ "clear", 0, b_clear },
 };
 
 /**
@@ -372,16 +371,6 @@ static int b_cd(struct command *cmd)
 static int b_exit(struct command *cmd)
 {
 	return -2;
-}
-
-/**
- * @brief My own addition. Can't have a shell without clear :D
- */
-static int b_clear(struct command *cmd)
-{
-	system("clear"); // iffy but I am not about to mess with ANSI and terminal compatibility
-	fflush(stdout);
-	return 0;
 }
 
 #pragma endregion
