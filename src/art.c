@@ -673,7 +673,7 @@ static void draw_warp(struct canvas *cv, int f)
 	static const char *quip;
 	if (f == 0) {
 		snprintf(home, sizeof(home), "to infinity and %s", getenv("HOME") ? getenv("HOME") : "/home");
-		quip = ONE_OF("engage. a tiny shell by Chatzikallias Panagiotis (ics24115)", home);
+		quip = ONE_OF("A tiny shell by Chatzikallias Panagiotis (ics24115)", home);
 	}
 	type_line(cv, top + 7, quip, 245, f, 70);
 }
