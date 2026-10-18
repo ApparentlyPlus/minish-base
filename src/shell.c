@@ -156,13 +156,23 @@ static int execute_pipeline(struct pipeline *pipeline)
 	if (pids == NULL)
 		return -1;
 
+	// Create and populate an array of pipes
+	int pipes[pipeline->command_count][2]; // one between each pair of commands (last slot unused)
+	size_t np;
+	for (np = 0; np + 1 < pipeline->command_count; np++) {
+		if (pipe(pipes[np]) == -1) {
+			result = -1;
+			break; // failed, skip launching and close the ones we opened
+		}
+	}
+
 	// The idea here is that we launch all commands, then:
 	//
 	// 1.) If the whole pipeline is foreground, we wait for them to finish - by blocking. 
 	// 2.) If not, we record them and let the signal handlers deal with them.
 
 	size_t cnt;
-	for(cnt = 0; cnt < pipeline->command_count; cnt++){
+	for(cnt = 0; result == 0 && cnt < pipeline->command_count; cnt++){
 		struct command* cmd = &pipeline->commands[cnt];
 		pid_t pid = fork();
 		if(pid < 0){
@@ -175,6 +185,22 @@ static int execute_pipeline(struct pipeline *pipeline)
 			// handle CTRL + C normally INSIDE the subprocess
 			if(pipeline->background != 1)
 				reghandler(SIGINT, SIG_DFL, 0);
+
+			// Piping should be handled first, here.
+
+			// Read from the previous command's pipe, unless this is the first command
+			if (cnt > 0)
+				dup2(pipes[cnt - 1][0], STDIN_FILENO);
+
+			// Write to the next command's pipe, unless this is the last command
+			if (cnt + 1 < pipeline->command_count)
+				dup2(pipes[cnt][1], STDOUT_FILENO);
+
+			// Close every pipe slot in the child
+			for (size_t i = 0; i + 1 < pipeline->command_count; i++) {
+				close(pipes[i][0]);
+				close(pipes[i][1]);
+			}
 
 			// The idea is that we open each redirect file and connect it to stdin or stdout.
 			// Then the program started by execvp reads from or writes to that file
@@ -204,6 +230,12 @@ static int execute_pipeline(struct pipeline *pipeline)
 		}
 
 		pids[cnt] = pid; // record the pid
+	}
+
+	// close the pipes
+	for (size_t i = 0; i < np; i++) {
+		close(pipes[i][0]);
+		close(pipes[i][1]);
 	}
 
 	// if foreground, block and wait
