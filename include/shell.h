@@ -11,6 +11,7 @@ struct job {
 	bool active;
 };
 
+static void print_banner(void);
 static void print_prompt(void);
 static int read_line(char *buffer, size_t size);
 static int execute_pipeline(struct pipeline *pipeline);
@@ -48,3 +49,4 @@ static int b_about(struct command *cmd);
 #define WHITE "\x1b[37m"
 #define RESET "\x1b[0m"
 #define BOLD "\x1b[1m"
+#define DIM "\x1b[2m"
