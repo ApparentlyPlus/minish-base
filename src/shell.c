@@ -47,6 +47,7 @@ int main(void)
 	setcwd();
 	setup_terminal(); // changes tabs to be pure spaces, otherwise backspaces break the terminal
 	init_bg_jobs(jobs);
+	print_banner();
 
 	// Our handlers
 	reghandler(SIGCHLD, handle_sigchld, SA_RESTART); // clean finished background jobs
@@ -293,6 +294,20 @@ static void restore_terminal(void)
 }
 
 #pragma region Helpers
+
+/**
+ * @brief Print the welcome banner, once at startup. Only when interactive.
+ */
+static void print_banner(void)
+{
+	if (isatty(STDIN_FILENO) == 0)
+		return;
+
+	printf("\n" BOLD MAGENTA "  minish" RESET BOLD " - a tiny Unix shell\n" RESET);
+	printf(DIM "  Developed by Chatzikallias Panagiotis (ics24115)\n");
+	printf("  Operating Systems (AIC303) assignment, University of Macedonia\n" RESET);
+	printf("  Run " BOLD GREEN "about" RESET "(many times) for a surprise.\n\n");
+}
 
 /**
  * @brief Print the interactive shell prompt.
