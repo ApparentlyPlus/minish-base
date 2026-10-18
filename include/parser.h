@@ -1,8 +1,6 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: t; -*- */
 
-#ifndef MINISH_PARSER_H
-#define MINISH_PARSER_H
-
+#pragma once
 #include <stddef.h>
 
 enum redirect_type {
@@ -68,5 +66,3 @@ void pipeline_free(struct pipeline *pipeline);
  * @return Constant error description.
  */
 const char *parse_error_string(int);
-
-#endif /* MINISH_PARSER_H */

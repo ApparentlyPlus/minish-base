@@ -1,4 +1,5 @@
-/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: t; -*- */
+/* This smells like very fresh LLM code... :sadge: */
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,18 +35,14 @@ static void command_init(struct command *command);
 static void command_free(struct command *command);
 static void pipeline_init(struct pipeline *pipeline);
 static int command_add_argument(struct command *command, char *argument);
-static int command_add_redirect(struct command *command,
-								enum redirect_type type, char *path);
-static int pipeline_add_command(struct pipeline *pipeline,
-								struct command *command);
+static int command_add_redirect(struct command *command, enum redirect_type type, char *path);
+static int pipeline_add_command(struct pipeline *pipeline, struct command *command);
 static int grow_array(void **array, size_t *capacity, size_t element_size);
 static int lexer_next(struct lexer *lexer, struct token *token);
 static void token_free(struct token *token);
 static void parser_advance(struct parser *parser);
-static int parse_command(struct parser *parser,
-						 struct command *command);
-static int parse_pipeline(struct parser *parser,
-						  struct pipeline *pipeline);
+static int parse_command(struct parser *parser, struct command *command);
+static int parse_pipeline(struct parser *parser, struct pipeline *pipeline);
 
 static void command_init(struct command *command)
 {
@@ -144,16 +141,13 @@ static int command_add_argument(struct command *command, char *argument)
 	return 0;
 }
 
-static int command_add_redirect(struct command *command,
-								enum redirect_type type, char *path)
+static int command_add_redirect(struct command *command, enum redirect_type type, char *path)
 {
 	if (!command || !path)
 		return -1;	
 	
 	if (command->redirect_count == command->redirect_capacity) {
-		if (grow_array((void **)&command->redirects,
-					   &command->redirect_capacity,
-					   sizeof(*command->redirects)))
+		if (grow_array((void **)&command->redirects, &command->redirect_capacity, sizeof(*command->redirects)))
 			return -1;
 	}
 	
@@ -171,9 +165,7 @@ static int pipeline_add_command(struct pipeline *pipeline,
 		return -1;
 		
 	if (pipeline->command_count == pipeline->command_capacity) {
-		if (grow_array((void **)&pipeline->commands,
-					   &pipeline->command_capacity,
-					   sizeof(*pipeline->commands)))
+		if (grow_array((void **)&pipeline->commands, &pipeline->command_capacity, sizeof(*pipeline->commands)))
 			return -1;
 	}
 	
@@ -322,12 +314,10 @@ static void parser_advance(struct parser *parser)
 	
 	token_free(&parser->current);
 	
-	if (lexer_next(&parser->lexer, &parser->current))
-		parser->current.type = TOKEN_END;
+	if (lexer_next(&parser->lexer, &parser->current)) parser->current.type = TOKEN_END;
 }
 
-static int  parse_command(struct parser *parser,
-						  struct command *command)
+static int  parse_command(struct parser *parser, struct command *command)
 {
 	enum redirect_type redirect_type;
 	char *path;
@@ -399,8 +389,7 @@ static int  parse_command(struct parser *parser,
 	return PARSE_SUCCESS;
 }
 
-static int parse_pipeline(struct parser *parser,
-						  struct pipeline *pipeline)
+static int parse_pipeline(struct parser *parser, struct pipeline *pipeline)
 {
 	struct command command;
 	enum parse_error error;

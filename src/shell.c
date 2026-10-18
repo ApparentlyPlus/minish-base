@@ -1,50 +1,20 @@
-/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: t; -*- */
 /*
- * Minish shell.
+ * Minish shell. This file is (proudly) human written, using Fedora Workstation 44 :-)
  *
- * Add The name of the first team member here in the form Surname Lastname, iis...
- * Add The name of the first team member here in the form Surname Lastname, iis...
-*/
+ * Chatzikallias Panagiotis - ics24115 
+ */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <linux/limits.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include "parser.h"
-
-#define INPUT_SIZE 4096
-#define MAX_JOBS 128
-
-struct job {
-	pid_t pid;
-	int active;
-};
-
-// This array can hold information about spawned processes.
-// Each array element describes a new process and holds its
-// PID and its state in the active variable. This variable
-// may take the value 1 if the job is active, or the value
-// 0 if the job is not active. The array can be used to
-// manage background jobs.
-//
-// You may use this array if you find it helpful. Otherwise,
-// fill free to delete it.
-static struct job jobs[MAX_JOBS];
-
-static void print_prompt(void);
-static int read_line(char *buffer, size_t size);
-static int execute_pipeline(const struct pipeline *pipeline);
-static void init_bg_jobs(struct job *jobs);
-static void add_bg_job(const pid_t pid);
-static void remove_bg_job(const pid_t pid);
-static void reap_bg_jobs(void);
-
-// Add the prototypes of helper funcitons here...
+#include <signal.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include "shell.h"
 
 /**
  * @brief Run the minish command interpreter.
@@ -53,23 +23,23 @@ static void reap_bg_jobs(void);
  */
 int main(void)
 {	
+	char cwd[PATH_MAX];
 	char line[INPUT_SIZE];
-	struct pipeline pipeline;
-	int error;
-	int result;
+	struct pipeline pipeline = {0};
+	int error, result;
+	setcwd(cwd, sizeof(cwd));
 
-	// Install the required signal handlers here.
-	// Add your code here.
+	// TODO: Install the required signal handlers here
 	 
-	// The main shell loop.
+	// The main shell loop
 	for (;;) {
-		// Print the prompt.
+		// Print the prompt
 		print_prompt();
 
-		// Read a command line from the user.
+		// Read a command line from the user
 		result = read_line(line, sizeof(line));
 
-		// Handle read errors.
+		// Handle read errors
 		if (result == 0)
 			break;
 
@@ -81,26 +51,26 @@ int main(void)
 			return EXIT_FAILURE;
 		}
 
-		// Parse the line.
+		// Parse the line
 		error = parse_line(line, &pipeline);
 
-		// An error occurred during parsing.
+		// An error occurred during parsing
 		if (error != PARSE_SUCCESS) {
 			fprintf(stderr, "minish: %s\n", parse_error_string(error));
 			continue;
 		}
 
-		// The user just pressed enter. We have nothing to execute at this time.
+		// The user just pressed enter, but we ain't got anything to do
 		if (pipeline.command_count == 0) {
 			pipeline_free(&pipeline);
 			continue;
 		}
 
-		// Execute the command pipeline.
+		// Execute the command pipeline
 		if ((result = execute_pipeline(&pipeline)) < 0)
 			perror("minish");
 
-		// Clear the pipeline.
+		// Clean up
 		pipeline_free(&pipeline);
 	}
 	return EXIT_SUCCESS;
@@ -139,35 +109,38 @@ static int read_line(char *buffer, size_t size)
 	return 1;
 }
 
+/**
+ * @brief Initializes the job array
+ */
 void init_bg_jobs(struct job *jobs)
 {
-	int i;
-  
 	if (!jobs)
 		return;
 		
-	for (i = 0; i < MAX_JOBS; i++) {		
-		jobs[i].pid =-1;
+	for (int i = 0; i < MAX_JOBS; i++) {		
+		jobs[i].pid = -1;
 		jobs[i].active = 0;
 	}
 }
 
+/**
+ * @brief Adds a job to the array, in the first free index
+ */
 void add_bg_job(const pid_t pid)
 {
-	int i;
-
-	for (i = 0; i < MAX_JOBS; i++) {
+	for (int i = 0; i < MAX_JOBS; i++) {
 		// Find the first position in the array with active == 0 and add the
 		// new job there. Then call break to exit the loop.
         // Add your code here...
 	}
 }
 
+/** 
+ * @brief Removes a completed job from the array
+ */
 void remove_bg_job(const pid_t pid)
 {
-	int i;
-
-	for (i = 0; i < MAX_JOBS; i++) {
+	for (int i = 0; i < MAX_JOBS; i++) {
 		// Find the first position in the array where its pid matches with the
 		// pid parameter of the function and then clean it by setting pid to
 		// -1 and active to 0.
@@ -175,13 +148,14 @@ void remove_bg_job(const pid_t pid)
 	}
 }
 
-// The function below should be called from a signal handler.
+/**
+ * @brief Cleans up any completed jobs
+ */
 void reap_bg_jobs(void) {
 	pid_t pid;
-	int status;	
-	int i;
+	int status;
 
-	for (i = 0; i < MAX_JOBS; i++) {
+	for (int i = 0; i < MAX_JOBS; i++) {
 		// Call pid = waitpid() system call properly for each array slot.
 		// If this call returns a positive pid, then this means that we just
 		// found a terminated background process. Call remove_bg_job()
@@ -228,4 +202,15 @@ static int execute_pipeline(const struct pipeline *pipeline)
         
 	free(pids);
 	return result;
+}
+
+/**
+ * @brief Sets the current working directory. Called on application startup.
+ */
+void setcwd(char* cwd, size_t size){
+   	if (getcwd(cwd, size) == NULL) {
+		perror("Failed to set current working directory");
+		exit(0);
+	}
+   	return;
 }
