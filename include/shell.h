@@ -17,6 +17,8 @@ static int execute_pipeline(struct pipeline *pipeline);
 static void setup_terminal(void);
 static void restore_terminal(void);
 
+void handle_sigchld(int signo);
+static int reghandler(int signo, void (*handler)(int), int flags);
 void init_bg_jobs(struct job *jobs);
 void add_bg_job(const pid_t pid);
 void remove_bg_job(const pid_t pid);

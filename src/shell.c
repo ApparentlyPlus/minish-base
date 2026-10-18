@@ -4,7 +4,7 @@
  * Chatzikallias Panagiotis - ics24115 
  */
 
-#define _DEFAULT_SOURCE // -std=c11 hides POSIX extras like TAB3 and sigaction
+#define _DEFAULT_SOURCE
 
 #include <linux/limits.h>
 #include <sys/types.h>
@@ -41,11 +41,15 @@ int main(void)
 	char line[INPUT_SIZE];
 	struct pipeline pipeline = {0};
 	int error, result;
+
+	// Setup calls
 	setcwd();
 	setup_terminal(); // changes tabs to be pure spaces, otherwise backspaces break the terminal
-	init_bg_jobs(jobs); // setup tracker for background jobs
+	init_bg_jobs(jobs);
 
-	// TODO: Install the required signal handlers here
+	// Our handlers
+	reghandler(SIGCHLD, handle_sigchld, SA_RESTART); // clean finished background jobs
+	reghandler(SIGINT, SIG_IGN, 0); // ignore CTRL + C in the parent shell
 	 
 	// The main shell loop
 	for (;;) {
@@ -95,6 +99,145 @@ int main(void)
 	}
 	return EXIT_SUCCESS;
 }
+
+/**
+ * @brief Handles completed signals for subprocesses
+ */
+void handle_sigchld(int signo){
+	reap_bg_jobs(); // clean up anything completed
+}
+
+/**
+ * @brief Registers a handler for a signal
+ */
+static int reghandler(int signo, void (*handler)(int), int flags)
+{
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = flags;
+
+	if (sigaction(signo, &sa, NULL) == -1) {
+		perror("sigaction");
+		return -1;
+	}
+	return 0;
+}
+
+/**
+ * @brief Execute all commands in a parsed pipeline.\
+ * @return 0 on success, -1 on error, -2 if exit was requested.
+ */
+static int execute_pipeline(struct pipeline *pipeline)
+{
+	int result = 0;
+	pid_t* pids;
+	
+	// Check for built ins
+	if(pipeline->command_count == 1){
+		struct command* cmd = &pipeline->commands[0];
+		const struct builtin *b = ffunc(cmd->argv[0]); // find the builtin func if it exists, else null
+
+		if(b){
+			// check if it has more args than it should
+			if(cmd->argc - 1 > b->margs){
+				if(b->margs == 0)
+					fprintf(stderr, RED "[-] The command '%s' takes no arguments.\n" RESET, b->name);
+				else
+					fprintf(stderr, RED "[-] The command '%s' takes at most %zu argument(s).\n" RESET, b->name, b->margs);
+				return 0;
+			}
+			return b->run(cmd);
+		}
+	}
+
+	// Keep track of the pids launched -> we will need this
+	pids = calloc(pipeline->command_count, sizeof(*pids));
+	if (pids == NULL)
+		return -1;
+
+	// The idea here is that we launch all commands, then:
+	//
+	// 1.) If the whole pipeline is foreground, we wait for them to finish - by blocking. 
+	// 2.) If not, we record them and let the signal handlers deal with them.
+
+	size_t cnt;
+	for(cnt = 0; cnt < pipeline->command_count; cnt++){
+		struct command* cmd = &pipeline->commands[cnt];
+		pid_t pid = fork();
+		if(pid < 0){
+			result = -1;
+			break; // failed, wait and collect
+		}
+
+		// child process, descriptors remain intact
+		else if(pid == 0){
+			// handle CTRL + C normally INSIDE the subprocess
+			if(pipeline->background != 1)
+				reghandler(SIGINT, SIG_DFL, 0);
+			
+			execvp(cmd->argv[0], cmd->argv);
+			perror(cmd->argv[0]); // only if exec fails
+			_exit(127); // _exit instead of exit because of the tab handling thingy (this bit me hard)
+		}
+
+		pids[cnt] = pid; // record the pid
+	}
+
+	// if foreground, block and wait
+	if(pipeline->background != 1){
+		for(size_t i = 0; i < cnt; i++)
+			waitpid(pids[i], NULL, 0);
+	}
+
+	// otherwise we put them in the jobs tracker for the handlers
+	else
+		for(size_t i = 0; i < cnt; i++)
+			add_bg_job(pids[i]); // find and add it
+        
+	free(pids);
+	return result;
+}
+
+#pragma region Misc
+
+/**
+ * @brief Sets the current working directory. Called on application startup.
+ */
+void setcwd(void){
+   	if (getcwd(cwd, sizeof(cwd)) == NULL) {
+		perror("Failed to set current working directory");
+		exit(0);
+	}
+   	return;
+}
+
+/**
+ * @brief Makes the terminal echo tabs as spaces.
+ */
+static void setup_terminal(void)
+{
+	struct termios t;
+
+	if (!isatty(STDIN_FILENO) || tcgetattr(STDIN_FILENO, &oterm) != 0)
+		return;
+
+	t = oterm;
+	t.c_oflag = (t.c_oflag & ~TABDLY) | TAB3;
+	tcsetattr(STDIN_FILENO, TCSANOW, &t);
+	atexit(restore_terminal);
+}
+
+/**
+ * @brief Puts the terminal back the way we found it
+ */
+static void restore_terminal(void)
+{
+	tcsetattr(STDIN_FILENO, TCSANOW, &oterm);
+}
+
+#pragma region Helpers
 
 /**
  * @brief Print the interactive shell prompt.
@@ -180,110 +323,7 @@ void reap_bg_jobs(void) {
 	}	
 }
 
-/**
- * @brief Execute all commands in a parsed pipeline.\
- * @return 0 on success, -1 on error, -2 if exit was requested.
- */
-static int execute_pipeline(struct pipeline *pipeline)
-{
-	int result = 0;
-	pid_t* pids;
-	
-	// Check for built ins
-	if(pipeline->command_count == 1){
-		struct command* cmd = &pipeline->commands[0];
-		const struct builtin *b = ffunc(cmd->argv[0]); // find the builtin func if it exists, else null
-
-		if(b){
-			// check if it has more args than it should
-			if(cmd->argc - 1 > b->margs){
-				if(b->margs == 0)
-					fprintf(stderr, RED "[-] The command '%s' takes no arguments.\n" RESET, b->name);
-				else
-					fprintf(stderr, RED "[-] The command '%s' takes at most %zu argument(s).\n" RESET, b->name, b->margs);
-				return 0;
-			}
-			return b->run(cmd);
-		}
-	}
-
-	// Keep track of the pids launched -> we will need this
-	pids = calloc(pipeline->command_count, sizeof(*pids));
-	if (pids == NULL)
-		return -1;
-
-	// The idea here is that we launch all commands. Then:
-	//
-	// 1.) If the whole pipeline is foreground, we wait for them to finish - by blocking. 
-	// 2.) If not, we record them and let the signal handlers deal with them.
-	size_t cnt;
-	for(cnt = 0; cnt < pipeline->command_count; cnt++){
-		struct command* cmd = &pipeline->commands[cnt];
-		pid_t pid = fork();
-		if(pid < 0){
-			result = -1;
-			break; // failed, wait and collect
-		}
-
-		// child process, descriptors remain intact
-		else if(pid == 0){
-			execvp(cmd->argv[0], cmd->argv);
-			perror(cmd->argv[0]); // only if exec fails
-			_exit(127); // _exit instead of exit because of the tab handling thingy (this bit me hard)
-		}
-
-		pids[cnt] = pid; // record the pid
-	}
-
-	// if foreground, block and wait
-	if(pipeline->background != 1){
-		for(size_t i = 0; i < cnt; i++)
-			waitpid(pids[i], NULL, 0);
-	}
-
-	// otherwise we put them in the jobs tracker for the handlers
-	else
-		for(size_t i = 0; i < cnt; i++)
-			add_bg_job(pids[i]); // find and add it
-        
-	free(pids);
-	return result;
-}
-
-/**
- * @brief Sets the current working directory. Called on application startup.
- */
-void setcwd(void){
-   	if (getcwd(cwd, sizeof(cwd)) == NULL) {
-		perror("Failed to set current working directory");
-		exit(0);
-	}
-   	return;
-}
-
-/**
- * @brief Makes the terminal echo tabs as spaces.
- */
-static void setup_terminal(void)
-{
-	struct termios t;
-
-	if (!isatty(STDIN_FILENO) || tcgetattr(STDIN_FILENO, &oterm) != 0)
-		return;
-
-	t = oterm;
-	t.c_oflag = (t.c_oflag & ~TABDLY) | TAB3;
-	tcsetattr(STDIN_FILENO, TCSANOW, &t);
-	atexit(restore_terminal);
-}
-
-/**
- * @brief Puts the terminal back the way we found it
- */
-static void restore_terminal(void)
-{
-	tcsetattr(STDIN_FILENO, TCSANOW, &oterm);
-}
+#pragma region "Builtins"
 
 /**
  * @brief Looks up a built in command by name
@@ -343,3 +383,5 @@ static int b_clear(struct command *cmd)
 	fflush(stdout);
 	return 0;
 }
+
+#pragma endregion
