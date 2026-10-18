@@ -9,7 +9,8 @@ TARGET := build/minish
 
 SRC := \
 	src/parser.c \
-	src/shell.c
+	src/shell.c \
+	src/art.c
 
 OBJ := $(SRC:%.c=build/%.o)
 
