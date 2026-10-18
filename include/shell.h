@@ -34,6 +34,7 @@ struct builtin {
 static const struct builtin *ffunc(const char *name);
 static int b_cd(struct command *cmd);
 static int b_exit(struct command *cmd);
+static int b_about(struct command *cmd);
 
 // Colors for style!
 

@@ -18,6 +18,7 @@
 #include <termios.h>
 #include <stdio.h>
 #include "shell.h"
+#include "art.h"
 
 static struct job jobs[MAX_JOBS];
 static char cwd[PATH_MAX];
@@ -28,6 +29,7 @@ static struct termios oterm;
 static const struct builtin b_ins[] = {
 	{ "cd", 1, b_cd },
 	{ "exit", 0, b_exit },
+	{ "about", 1, b_about },
 };
 
 /**
@@ -425,6 +427,38 @@ static int b_cd(struct command *cmd)
 static int b_exit(struct command *cmd)
 {
 	return -2;
+}
+
+/**
+ * @brief Plays an animation (the named one, or a random one) in a child, so
+ * CTRL + C kills only the child and the shell stays alive to clean up the screen
+ */
+static int b_about(struct command *cmd)
+{
+	const struct art *a = cmd->argc > 1 ? art_find(cmd->argv[1]) : art_random();
+
+	if (!a) {
+		fprintf(stderr, RED "[-] usage: about [%s]\n" RESET, art_names());
+		return 0;
+	}
+
+	if (!isatty(STDOUT_FILENO)) {
+		printf("minish - a tiny shell by Chatzikallias Panagiotis (ics24115)\n");
+		return 0;
+	}
+
+	pid_t pid = fork();
+	if (pid < 0)
+		return -1;
+	if (pid == 0) {
+		reghandler(SIGINT, SIG_DFL, 0);
+		a->play();
+	}
+
+	waitpid(pid, NULL, 0);
+	printf("\x1b[0m\x1b[?25h\x1b[?1049l"); // reset colors, show cursor, leave the alternate screen
+	fflush(stdout);
+	return 0;
 }
 
 #pragma endregion
