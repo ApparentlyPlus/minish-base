@@ -175,10 +175,32 @@ static int execute_pipeline(struct pipeline *pipeline)
 			// handle CTRL + C normally INSIDE the subprocess
 			if(pipeline->background != 1)
 				reghandler(SIGINT, SIG_DFL, 0);
+
+			// The idea is that we open each redirect file and connect it to stdin or stdout.
+			// Then the program started by execvp reads from or writes to that file
+			// through its usual standard input/output slots.
+
+			for (size_t i = 0; i < cmd->redirect_count; i++) {
+				struct redirect* rd = &cmd->redirects[i];
+				int tt = STDOUT_FILENO, flags = O_WRONLY | O_CREAT; // target and flags
+
+				if (rd->type == REDIRECT_INPUT) {
+					tt = STDIN_FILENO;
+					flags = O_RDONLY;
+				} else
+					flags |= rd->type == REDIRECT_APPEND ? O_APPEND : O_TRUNC; // add trun or append with wizardry
+
+				int fd = open(rd->path, flags, 0644); // 0644 is perms if the file gets created
+				if (fd == -1 || dup2(fd, tt) == -1) {
+					perror(rd->path);
+					_exit(1);
+				}
+				close(fd);
+			}
 			
 			execvp(cmd->argv[0], cmd->argv);
 			perror(cmd->argv[0]); // only if exec fails
-			_exit(127); // _exit instead of exit because of the tab handling thingy (this bit me hard)
+			_exit(1); // _exit instead of exit because of the tab handling thingy (this bit me hard)
 		}
 
 		pids[cnt] = pid; // record the pid
