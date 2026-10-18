@@ -4,6 +4,8 @@
  * Chatzikallias Panagiotis - ics24115 
  */
 
+#define _DEFAULT_SOURCE // -std=c11 hides POSIX extras like TAB3 and sigaction
+
 #include <linux/limits.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -17,9 +19,10 @@
 #include <stdio.h>
 #include "shell.h"
 
+static struct job jobs[MAX_JOBS];
 static char cwd[PATH_MAX];
 static char oldcwd[PATH_MAX];
-static struct termios orig_term;
+static struct termios oterm;
 
 // Our built in methods, dispatched
 static const struct builtin b_ins[] = {
@@ -40,6 +43,7 @@ int main(void)
 	int error, result;
 	setcwd();
 	setup_terminal(); // changes tabs to be pure spaces, otherwise backspaces break the terminal
+	init_bg_jobs(jobs); // setup tracker for background jobs
 
 	// TODO: Install the required signal handlers here
 	 
@@ -130,7 +134,7 @@ void init_bg_jobs(struct job *jobs)
 		
 	for (int i = 0; i < MAX_JOBS; i++) {		
 		jobs[i].pid = -1;
-		jobs[i].active = 0;
+		jobs[i].active = false;
 	}
 }
 
@@ -140,9 +144,11 @@ void init_bg_jobs(struct job *jobs)
 void add_bg_job(const pid_t pid)
 {
 	for (int i = 0; i < MAX_JOBS; i++) {
-		// Find the first position in the array with active == 0 and add the
-		// new job there. Then call break to exit the loop.
-        // Add your code here...
+		if(!jobs[i].active){
+			jobs[i].pid = pid;
+			jobs[i].active = true;
+			break;
+		}
 	}
 }
 
@@ -152,10 +158,11 @@ void add_bg_job(const pid_t pid)
 void remove_bg_job(const pid_t pid)
 {
 	for (int i = 0; i < MAX_JOBS; i++) {
-		// Find the first position in the array where its pid matches with the
-		// pid parameter of the function and then clean it by setting pid to
-		// -1 and active to 0.
-        // Add your code here...
+		if(jobs[i].pid == pid){
+			jobs[i].pid = -1;
+			jobs[i].active = false;
+			break;
+		}
 	}
 }
 
@@ -167,12 +174,9 @@ void reap_bg_jobs(void) {
 	int status;
 
 	for (int i = 0; i < MAX_JOBS; i++) {
-		// Call pid = waitpid() system call properly for each array slot.
-		// If this call returns a positive pid, then this means that we just
-		// found a terminated background process. Call remove_bg_job()
-		// properly to remove this process from the jobs array.
-          		
-        // Add your code here...
+		if(jobs[i].active && waitpid(jobs[i].pid, &status, WNOHANG) > 0){
+			remove_bg_job(jobs[i].pid);
+		}
 	}	
 }
 
@@ -182,12 +186,12 @@ void reap_bg_jobs(void) {
  */
 static int execute_pipeline(struct pipeline *pipeline)
 {
-	pid_t *pids;	
 	int result = 0;
+	pid_t* pids;
 	
 	// Check for built ins
 	if(pipeline->command_count == 1){
-		struct command *cmd = &pipeline->commands[0];
+		struct command* cmd = &pipeline->commands[0];
 		const struct builtin *b = ffunc(cmd->argv[0]); // find the builtin func if it exists, else null
 
 		if(b){
@@ -203,21 +207,44 @@ static int execute_pipeline(struct pipeline *pipeline)
 		}
 	}
 
-	// No internal command found. We have to execute a new program for each
-	// command in the pipeline.
-
-	// Allocate an array to store the PID of each child process.
-    // You may use the array below, if you find it helpful.    
+	// Keep track of the pids launched -> we will need this
 	pids = calloc(pipeline->command_count, sizeof(*pids));
 	if (pids == NULL)
 		return -1;
 
-	// Process each command in the pipeline. Remember that the command_count
-	// tells us the number of commands in the pipeline.
-	// E.g., cmd1 | cmd2 : 2 commands.
-	// E.g., cmd1 : 1 command.
+	// The idea here is that we launch all commands. Then:
+	//
+	// 1.) If the whole pipeline is foreground, we wait for them to finish - by blocking. 
+	// 2.) If not, we record them and let the signal handlers deal with them.
+	size_t cnt;
+	for(cnt = 0; cnt < pipeline->command_count; cnt++){
+		struct command* cmd = &pipeline->commands[cnt];
+		pid_t pid = fork();
+		if(pid < 0){
+			result = -1;
+			break; // failed, wait and collect
+		}
 
-	// Add your code here...
+		// child process, descriptors remain intact
+		else if(pid == 0){
+			execvp(cmd->argv[0], cmd->argv);
+			perror(cmd->argv[0]); // only if exec fails
+			_exit(127); // _exit instead of exit because of the tab handling thingy (this bit me hard)
+		}
+
+		pids[cnt] = pid; // record the pid
+	}
+
+	// if foreground, block and wait
+	if(pipeline->background != 1){
+		for(size_t i = 0; i < cnt; i++)
+			waitpid(pids[i], NULL, 0);
+	}
+
+	// otherwise we put them in the jobs tracker for the handlers
+	else
+		for(size_t i = 0; i < cnt; i++)
+			add_bg_job(pids[i]); // find and add it
         
 	free(pids);
 	return result;
@@ -241,10 +268,10 @@ static void setup_terminal(void)
 {
 	struct termios t;
 
-	if (!isatty(STDIN_FILENO) || tcgetattr(STDIN_FILENO, &orig_term) != 0)
+	if (!isatty(STDIN_FILENO) || tcgetattr(STDIN_FILENO, &oterm) != 0)
 		return;
 
-	t = orig_term;
+	t = oterm;
 	t.c_oflag = (t.c_oflag & ~TABDLY) | TAB3;
 	tcsetattr(STDIN_FILENO, TCSANOW, &t);
 	atexit(restore_terminal);
@@ -255,7 +282,7 @@ static void setup_terminal(void)
  */
 static void restore_terminal(void)
 {
-	tcsetattr(STDIN_FILENO, TCSANOW, &orig_term);
+	tcsetattr(STDIN_FILENO, TCSANOW, &oterm);
 }
 
 /**

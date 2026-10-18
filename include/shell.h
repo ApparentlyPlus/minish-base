@@ -1,16 +1,15 @@
 
 #pragma once
 #include "parser.h"
+#include <stdbool.h>
 
 #define INPUT_SIZE 4096
 #define MAX_JOBS 128
 
 struct job {
 	pid_t pid;
-	int active;
+	bool active;
 };
-
-static struct job jobs[MAX_JOBS];
 
 static void print_prompt(void);
 static int read_line(char *buffer, size_t size);

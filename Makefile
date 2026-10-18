@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -Wpedantic -Werror -Wno-unused-variable \
+CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror -Wno-unused-variable \
           -Wno-unused-function -Wno-unused-parameter -g
 CPPFLAGS := -Iinclude
 LDFLAGS :=
