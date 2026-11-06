@@ -305,7 +305,7 @@ static void print_banner(void)
 	printf("\n" BOLD MAGENTA "  minish" RESET BOLD " - a tiny Unix shell\n" RESET);
 	printf(DIM "  Developed by Chatzikallias Panagiotis (ics24115)\n");
 	printf("  Operating Systems (AIC303) assignment, University of Macedonia\n" RESET);
-	printf("  Run " BOLD GREEN "about" RESET "(many times) for a surprise.\n\n");
+	printf("  Run " BOLD GREEN "about" RESET " (many times) for a surprise.\n\n");
 }
 
 /**
