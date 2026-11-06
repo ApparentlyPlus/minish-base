@@ -167,9 +167,8 @@ static int execute_pipeline(struct pipeline *pipeline)
 	}
 
 	// The idea here is that we launch all commands, then:
-	//
-	// 1.) If the whole pipeline is foreground, we wait for them to finish - by blocking. 
-	// 2.) If not, we record them and let the signal handlers deal with them.
+	// If the whole pipeline is foreground, we wait for them to finish - by blocking. 
+	// If not, we record them and let the signal handlers deal with them.
 
 	size_t cnt;
 	for(cnt = 0; result == 0 && cnt < pipeline->command_count; cnt++){
